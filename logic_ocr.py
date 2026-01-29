@@ -2,6 +2,7 @@ import re
 import cv2
 import pytesseract
 import os
+import numpy as np
 
 # NOTE: On Linux, we don't usually need to set tesseract_cmd if it's installed via apt.
 # On Windows (later), we will uncomment this:
@@ -16,10 +17,20 @@ def preprocess_image(image_path):
     img = cv2.imread(image_path)
     if img is None:
         return None
+    
+    # upscaling
+    scale_percent = 200
+    width = int(img.shape[1] * scale_percent / 100)
+    height = int(img.shape[0] * scale_percent / 100)
+    dim = (width, height)
+    img = cv2.resize(img, dim, interpolation=cv2.INTER_CUBIC)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    _, thresh = cv2.threshold(gray, 140, 255, cv2.THRESH_BINARY)
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    kernel = np.ones((1, 1), np.uint8)
+    thresh = cv2.dilate(thresh, kernel, iterations=1)
 
     return thresh
 
@@ -39,7 +50,7 @@ def extract_text(image_path: str):
         return ""
     
     try:
-        text: str = pytesseract.image_to_string(image, lang="por", config="--psm 6")
+        text: str = pytesseract.image_to_string(image, lang="por", config="--psm 4")
         return text.strip()
     except Exception as e:
         print(f"[OCR] Error: {e}")
@@ -70,18 +81,18 @@ def parse_fields_strategy_a(text: str):
     if tracking_matches:
         data["tracking"] = tracking_matches[0]
     else:
-        long_match = re.search(r'\bBR\d{12,}[A-Z]{2}\b', clean_text)
+        long_match = re.search(r'\bBR\d{10,}[A-Z0-9]*\b', clean_text)
         if long_match:
             data["tracking"] = long_match.group(0)
     
     for i, line in enumerate(lines):
-        if "DESTINAT" in line:
-            clean_line = re.sub(r'DESTINAT[AÁ]RIO[:\.]?', '', line).strip()
-            if len(clean_line) > 3:
+        if "DESTINA" in line:
+            clean_line = re.sub(r'DESTINA[A-ZÁ]*[:\.]?', '', line).strip()
+            if len(clean_line) > 3 and "|" not in clean_line:
                 data["recipient"] = clean_line
             elif i + 1 < len(lines):
                 potential_name = lines[i + 1]
-                if "RUA" not in potential_name and "CEP" not in potential_name:
+                if len(potential_name) > 3 and "RUA" not in potential_name and "CEP" not in potential_name:
                     data["recipient"] = potential_name
         
         if "REMETENTE" in line:
@@ -91,8 +102,8 @@ def parse_fields_strategy_a(text: str):
             elif i + 1 < len(lines):
                 data["sender"] = lines[i + 1]
 
-        if "CEP" in line:
-            cep_match = re.search(r'\d{5}-\d{3}', line)
+        if "CEP" in line or re.search(r'\d{5}-\d{3}', line):
+            cep_match = re.search(r'\d{5}[- ]?\d{3}', line)
             if cep_match:
                 data["cep"] = cep_match.group(0)
 
