@@ -1,57 +1,137 @@
-import logic_ocr
+import logic_ocr as logic_ocr
 import json
-import os
-import cv2
 
-test_images = [
-    "images/package.png",
-    "images/package2.png",
-    "images/real_shopee.png"
+# Test cases with expected values
+test_cases = [
+    {
+        "file": "images/package.png",
+        "name": "package.png",
+        "expected": {
+            "tracking": "OF666611769BR",
+            "carrier": "SHOPEE",
+            "recipient": None,  # Not visible in this image
+            "sender": None,
+            "cep": "99124802"
+        }
+    },
+    {
+        "file": "images/package2.png",
+        "name": "package2.png",
+        "expected": {
+            "tracking": "OF666611769BR",
+            "carrier": "SHOPEE",
+            "recipient": "Yara",
+            "sender": "Leoshop",
+            "cep": None
+        }
+    },
+    {
+        "file": "images/real_shopee.png",
+        "name": "real_shopee.png",
+        "expected": {
+            "tracking": "OF666611769BR",
+            "carrier": "SHOPEE",
+            "recipient": "Yara",
+            "sender": "Leoshop",
+            "cep": None
+        }
+    },
+    {
+        "file": "images/package_amazon.jpeg",
+        "name": "package_amazon.jpeg",
+        "expected": {
+            "tracking": "TBR300059176",
+            "carrier": "AMAZON",
+            "recipient": "Mayara",  # or "vera" - OCR may vary
+            "sender": None,
+            "cep": "61886901" or "68416392"  # Multiple possible CEPs in label
+        }
+    }
 ]
 
-print("========================================")
-print("🔎 OCR LOGIC VERIFICATION TOOL")
-print("========================================")
+def check_match(expected, actual, field_name):
+    """Check if actual value matches expected value (fuzzy for names)"""
+    if expected is None:
+        return None  # Don't count this field
+    
+    if not actual or actual == "DESCONHECIDO":
+        return False
+    
+    # Exact match for tracking codes and carriers
+    if field_name in ["tracking", "carrier"]:
+        return expected.upper() == actual.upper()
+    
+    # CEP can have different formats
+    if field_name == "cep":
+        expected_clean = expected.replace("-", "").replace(" ", "")
+        actual_clean = actual.replace("-", "").replace(" ", "")
+        return expected_clean in actual_clean or actual_clean in expected_clean
+    
+    # Fuzzy match for names (partial match OK)
+    if field_name in ["recipient", "sender"]:
+        return expected.upper() in actual.upper() or actual.upper() in expected.upper()
+    
+    return False
 
-for image_path in test_images:
-    print(f"\nProcessing: {image_path}...")
-    if not os.path.exists(image_path):
-        print(f"❌ Error: File {image_path} not found.")
-        continue
+print("=" * 60)
+print("📊 OCR EXTRACTION SUCCESS RATE CALCULATOR")
+print("=" * 60)
 
-    # 1. Run Extraction
-    raw_text = logic_ocr.extract_text(image_path)
-    # 2. Run Parsing
-    parsed_data = logic_ocr.parse_fields_strategy_a(raw_text)
-    # 3. Print Results
-    print("-" * 40)
-    print("📄 RAW TEXT (First 300 chars):")
-    print(f"{raw_text[:300]}...") # Truncate to keep console clean
-    print("-" * 40)
-    print("🧠 PARSED DATA:")
-    print(json.dumps(parsed_data, indent=4, ensure_ascii=False))
+total_fields = 0
+successful_fields = 0
+skipped_fields = 0
 
-    # 4. Specific Checks for the REAL Shopee Label
-    if "package2" in image_path:
-        print("-" * 40)
-        print("🎯 SPECIFIC VALIDATION (Real Label):")
+for test in test_cases:
+    print(f"\n📦 {test['name']}")
+    print("-" * 60)
+    
+    # Extract text and parse
+    raw_text = logic_ocr.extract_text(test["file"])
+    parsed = logic_ocr.parse_fields_strategy_a(raw_text)
+    
+    fields_to_check = ["tracking", "carrier", "recipient", "sender", "cep"]
+    
+    for field in fields_to_check:
+        expected = test["expected"].get(field)
+        actual = parsed.get(field, "")
         
-        # Check Tracking (Should be OF666611769BR, NOT the bottom BR...DU code)
-        if parsed_data["tracking"] == "OF666611769BR":
-            print("✅ Tracking: CORRECT (OF666611769BR)")
+        result = check_match(expected, actual, field)
+        
+        if result is None:
+            icon = "⚪"
+            status = "N/A"
+            skipped_fields += 1
+        elif result:
+            icon = "✅"
+            status = "CORRECT"
+            successful_fields += 1
+            total_fields += 1
         else:
-            print(f"❌ Tracking: FAIL (Got '{parsed_data['tracking']}')")
-            
-        # Check Recipient (Should be Yara)
-        if "Yara" in parsed_data["recipient"]:
-            print("✅ Recipient: CORRECT (Found 'Yara')")
-        else:
-            print(f"❌ Recipient: FAIL (Got '{parsed_data['recipient']}')")
+            icon = "❌"
+            status = "WRONG"
+            total_fields += 1
+        
+        # Format output
+        field_display = field.ljust(10)
+        expected_display = str(expected)[:20].ljust(20) if expected else "N/A".ljust(20)
+        actual_display = str(actual)[:20].ljust(20) if actual else "''".ljust(20)
+        
+        print(f"{icon} {field_display} | Expected: {expected_display} | Got: {actual_display} | {status}")
 
-        # Check Sender (Should be Leoshop)
-        if "Leoshop" in parsed_data["sender"]:
-            print("✅ Sender: CORRECT (Found 'Leoshop')")
-        else:
-            print(f"❌ Sender: FAIL (Got '{parsed_data['sender']}')")
-            
-    print("========================================")
+print("\n" + "=" * 60)
+print("📈 FINAL RESULTS")
+print("=" * 60)
+
+if total_fields > 0:
+    success_rate = (successful_fields / total_fields) * 100
+    print(f"✅ Successful: {successful_fields}/{total_fields} fields")
+    print(f"❌ Failed: {total_fields - successful_fields}/{total_fields} fields")
+    print(f"⚪ Skipped (N/A): {skipped_fields} fields")
+    print(f"\n🎯 SUCCESS RATE: {success_rate:.1f}%")
+    
+    if success_rate >= 60:
+        print("\n🎉 TARGET MET! (≥60%)")
+    else:
+        print(f"\n⚠️  Below target. Need {60 - success_rate:.1f}% more.")
+else:
+    print("No fields to evaluate")

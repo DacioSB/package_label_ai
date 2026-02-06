@@ -1,62 +1,87 @@
-import re
 import cv2
 import pytesseract
+import re
 import os
-import numpy as np
 
-# NOTE: On Linux, we don't usually need to set tesseract_cmd if it's installed via apt.
-# On Windows (later), we will uncomment this:
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-def preprocess_image(image_path):
-    """
-    Loads an image, converts to grayscale, and applies thresholding
-    to make text stand out against the background.
-    """
+# =========================================================
+# IMAGE PREPROCESSING
+# =========================================================
 
+def preprocess_image(image_path: str):
     img = cv2.imread(image_path)
     if img is None:
         return None
-    
-    # upscaling
-    scale_percent = 200
-    width = int(img.shape[1] * scale_percent / 100)
-    height = int(img.shape[0] * scale_percent / 100)
-    dim = (width, height)
-    img = cv2.resize(img, dim, interpolation=cv2.INTER_CUBIC)
+
+    # Moderate upscale
+    img = cv2.resize(
+        img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC
+    )
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
 
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    kernel = np.ones((1, 1), np.uint8)
-    thresh = cv2.dilate(thresh, kernel, iterations=1)
+    _, thresh = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
 
     return thresh
 
-def extract_text(image_path: str):
-    """
-    Orchestrates the OCR process.
-    Returns the raw string text found in the image.
-    """
 
+def extract_text(image_path: str) -> str:
     if not os.path.exists(image_path):
-        print(f"[OCR] Error: File {image_path} not found.")
         return ""
 
-    image = preprocess_image(image_path)
-    if image is None:
-        print("[OCR] Error: Could not load image.")
+    processed = preprocess_image(image_path)
+    if processed is None:
         return ""
-    
+
     try:
-        text: str = pytesseract.image_to_string(image, lang="por", config="--psm 4")
-        return text.strip()
-    except Exception as e:
-        print(f"[OCR] Error: {e}")
+        return pytesseract.image_to_string(
+            processed,
+            lang="eng",
+            config="--psm 4"
+        ).strip()
+    except Exception:
         return ""
-    
-def parse_fields_strategy_a(text: str):
+
+
+# =========================================================
+# HELPERS
+# =========================================================
+
+def normalize(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip())
+
+
+def looks_like_name(text: str) -> bool:
+    if not text or len(text) < 3 or len(text) > 40:
+        return False
+
+    upper = text.upper()
+
+    blacklist = [
+        "AGENCIA", "XPRESS", "SEDEX", "CODIGO", "USO",
+        "RUA", "AV", "AVENIDA", "CEP", "CONTRATO",
+        "PEDIDO", "AMAZON", "SHOPEE", "BR", "OF"
+    ]
+
+    if any(word in upper for word in blacklist):
+        return False
+
+    digit_ratio = sum(c.isdigit() for c in text) / len(text)
+    if digit_ratio > 0.1:
+        return False
+
+    alpha_ratio = sum(c.isalpha() or c.isspace() for c in text) / len(text)
+    return alpha_ratio > 0.7
+
+
+# =========================================================
+# MAIN PARSER
+# =========================================================
+
+def parse_fields_strategy_a(text: str) -> dict:
     data = {
         "tracking": "",
         "cep": "",
@@ -64,47 +89,128 @@ def parse_fields_strategy_a(text: str):
         "sender": "",
         "carrier": "DESCONHECIDO"
     }
+
     clean_text = text.upper()
-    lines = clean_text.split("\n")
-    lines = [line.strip() for line in lines if line.strip()]
-    
-    # --- 1. CARRIER ---
-    if "SHOPEE" in clean_text: data["carrier"] = "SHOPEE"
-    elif "MERCADO" in clean_text: data["carrier"] = "MERCADO LIVRE"
-    elif "AMAZON" in clean_text: data["carrier"] = "AMAZON"
-    elif "MAGALU" in clean_text: data["carrier"] = "MAGALU"
-    elif "CORREIOS" in clean_text or "SEDEX" in clean_text: data["carrier"] = "CORREIOS"
+    lines = [
+        normalize(l)
+        for l in clean_text.split("\n")
+        if len(l.strip()) > 2
+    ]
 
-    correios_pattern = r'\b[A-Z]{2}\d{9}[A-Z]{2}\b'
-    tracking_matches = re.findall(correios_pattern, clean_text)
+    # =====================================================
+    # 1. INITIAL CARRIER DETECTION (TEXTUAL)
+    # =====================================================
+    if "AMAZ" in clean_text or "VAREJO" in clean_text:
+        data["carrier"] = "AMAZON"
+    elif "SHOPEE" in clean_text or ("SHOP" in clean_text and "XPRESS" in clean_text):
+        data["carrier"] = "SHOPEE"
+    elif "MERCADO" in clean_text and "LIVRE" in clean_text:
+        data["carrier"] = "MERCADO LIVRE"
+    elif "MAGALU" in clean_text or "MAGAZINE" in clean_text:
+        data["carrier"] = "MAGALU"
+    elif "CORREIOS" in clean_text or "SEDEX" in clean_text:
+        data["carrier"] = "CORREIOS"
 
-    if tracking_matches:
-        data["tracking"] = tracking_matches[0]
-    else:
-        long_match = re.search(r'\bBR\d{10,}[A-Z0-9]*\b', clean_text)
-        if long_match:
-            data["tracking"] = long_match.group(0)
-    
+    # =====================================================
+    # 2. TRACKING CODE EXTRACTION
+    # =====================================================
+    text_nospace = clean_text.replace(" ", "")
+    tracking_candidates = []
+
+    for m in re.finditer(r"OF\d{9}[A-Z]{2}", text_nospace):
+        tracking_candidates.append(("SHOPEE", m.group(0)))
+
+    for m in re.finditer(r"T[BDR][A-Z0-9]\d{8,12}", text_nospace):
+        tracking_candidates.append(("AMAZON", m.group(0)))
+
+    for m in re.finditer(r"[A-Z]{2}\d{9}[A-Z]{2}", text_nospace):
+        tracking_candidates.append(("CORREIOS", m.group(0)))
+
+    # Prefer tracking matching detected carrier
+    for typ, code in tracking_candidates:
+        if typ == data["carrier"]:
+            data["tracking"] = code
+            break
+
+    if not data["tracking"] and tracking_candidates:
+        data["tracking"] = tracking_candidates[0][1]
+
+    # =====================================================
+    # 3. FORCE CARRIER BY TRACKING (CRITICAL FIX)
+    # =====================================================
+    if data["tracking"].startswith("OF"):
+        data["carrier"] = "SHOPEE"
+    elif data["tracking"].startswith(("TBA", "TBR", "TBM")):
+        data["carrier"] = "AMAZON"
+
+    # =====================================================
+    # 4. RECIPIENT / SENDER / CEP EXTRACTION
+    # =====================================================
+    recipient_line = None
+    cep_candidates = []
+
     for i, line in enumerate(lines):
-        if "DESTINA" in line:
-            clean_line = re.sub(r'DESTINA[A-ZÁ]*[:\.]?', '', line).strip()
-            if len(clean_line) > 3 and "|" not in clean_line:
-                data["recipient"] = clean_line
-            elif i + 1 < len(lines):
-                potential_name = lines[i + 1]
-                if len(potential_name) > 3 and "RUA" not in potential_name and "CEP" not in potential_name:
-                    data["recipient"] = potential_name
-        
-        if "REMETENTE" in line:
-            clean_line = re.sub(r'REMETENTE[:\.]?', '', line).strip()
-            if len(clean_line) > 3:
-                data["sender"] = clean_line
-            elif i + 1 < len(lines):
-                data["sender"] = lines[i + 1]
 
-        if "CEP" in line or re.search(r'\d{5}-\d{3}', line):
-            cep_match = re.search(r'\d{5}[- ]?\d{3}', line)
-            if cep_match:
-                data["cep"] = cep_match.group(0)
+        # ---------- RECIPIENT (DESTINATARIO) ----------
+        if "DESTINAT" in line and not data["recipient"]:
+            for j in range(1, 5):
+                if i + j < len(lines):
+                    candidate = lines[i + j]
+                    if looks_like_name(candidate):
+                        data["recipient"] = candidate
+                        recipient_line = i + j
+                        break
+
+        # ---------- SENDER (REMETENTE) ----------
+        if ("REMET" in line or "SENDER" in line) and not data["sender"]:
+            for j in range(1, 5):
+                if i + j < len(lines):
+                    candidate = lines[i + j]
+                    if looks_like_name(candidate):
+                        data["sender"] = candidate
+                        break
+
+        # ---------- AMAZON SPECIAL: NAME ABOVE ADDRESS ----------
+        if data["carrier"] == "AMAZON" and not data["recipient"]:
+            if any(x in line for x in ["RUA", "AV", "AVENIDA"]):
+                for back in range(1, 4):
+                    if i - back >= 0:
+                        candidate = lines[i - back]
+                        if looks_like_name(candidate):
+                            data["recipient"] = candidate
+                            recipient_line = i - back
+                            break
+
+        # ---------- CEP ----------
+        cep_match = re.search(r"\b\d{5}[- ]?\d{3}\b", line)
+        if cep_match:
+            cep_candidates.append(
+                (i, cep_match.group(0).replace("-", "").replace(" ", ""))
+            )
+
+    # =====================================================
+    # 5. SHOPEE FALLBACK RECIPIENT (NO DESTINATARIO)
+    # =====================================================
+    if data["carrier"] == "SHOPEE" and not data["recipient"]:
+        for i, line in enumerate(lines):
+            if looks_like_name(line):
+                data["recipient"] = line
+                recipient_line = i
+                break
+
+    # =====================================================
+    # 6. CEP SELECTION (CARRIER-AWARE)
+    # =====================================================
+    if cep_candidates:
+        if data["carrier"] == "AMAZON":
+            # Amazon: last CEP is almost always recipient
+            data["cep"] = cep_candidates[-1][1]
+        elif recipient_line is not None:
+            data["cep"] = min(
+                cep_candidates,
+                key=lambda x: abs(x[0] - recipient_line)
+            )[1]
+        else:
+            data["cep"] = cep_candidates[-1][1]
 
     return data
