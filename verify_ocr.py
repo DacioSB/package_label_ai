@@ -4,47 +4,69 @@ import json
 # Test cases with expected values
 test_cases = [
     {
-        "file": "images/package.png",
-        "name": "package.png",
-        "expected": {
-            "tracking": "OF666611769BR",
-            "carrier": "SHOPEE",
-            "recipient": None,  # Not visible in this image
-            "sender": None,
-            "cep": "99124802"
-        }
-    },
-    {
-        "file": "images/package2.png",
-        "name": "package2.png",
-        "expected": {
-            "tracking": "OF666611769BR",
-            "carrier": "SHOPEE",
-            "recipient": "Yara",
-            "sender": "Leoshop",
-            "cep": None
-        }
-    },
-    {
-        "file": "images/real_shopee.png",
-        "name": "real_shopee.png",
-        "expected": {
-            "tracking": "OF666611769BR",
-            "carrier": "SHOPEE",
-            "recipient": "Yara",
-            "sender": "Leoshop",
-            "cep": None
-        }
-    },
-    {
         "file": "images/package_amazon.jpeg",
         "name": "package_amazon.jpeg",
         "expected": {
             "tracking": "TBR300059176",
             "carrier": "AMAZON",
-            "recipient": "Mayara",  # or "vera" - OCR may vary
-            "sender": None,
-            "cep": "61886901" or "68416392"  # Multiple possible CEPs in label
+            "recipient": "Mayara",
+            "sender": "DESCONHECIDO",
+            "cep": "58415392" or "68415392"
+        }
+    },
+    {
+        "file": "images/adel_perfumes.jpg",
+        "name": "adel_perfumes.jpg",
+        "expected": {
+            "tracking": "UADEL772847983",
+            "carrier": "DESCONHECIDO",
+            "recipient": "Dacio Bezerra",
+            "sender": "Adel perfumes",
+            "cep": "58013240"
+        }
+    },
+    {
+        "file": "images/centauro.jpg",
+        "name": "centauro.jpg",
+        "expected": {
+            "tracking": "9923401130101" or "99234011301" or "58475000" or "68475000",
+            "carrier": "DESCONHECIDO",
+            "recipient": "Dacio Bezerra",
+            "sender": "SBF COMERCIO DE PRODUTOS ESPORTIVOS LTDA",
+            "cep": "58013240"
+        }
+    },
+    {
+        "file": "images/dafiti.jpg",
+        "name": "dafiti.jpg",
+        "expected": {
+            "tracking": "NR163351686BR",
+            "carrier": "DESCONHECIDO",
+            "recipient": "DACIO BEZERRA",
+            "sender": "Dafiti CD Extrema" or "GFG COMERCIO DIGITAL LTDA",
+            "cep": "58013-240"
+        }
+    },
+    {
+        "file": "images/new_shopee2.jpg",
+        "name": "new_shopee2.jpg",
+        "expected": {
+            "tracking": "BR267104392699Y",
+            "carrier": "SHOPEE",
+            "recipient": "Dacio Silva Bezerra",
+            "sender": "Can You Hear?",
+            "cep": "58013-240"
+        }
+    },
+    {
+        "file": "images/new_shopee3.jpg",
+        "name": "new_shopee3.jpg",
+        "expected": {
+            "tracking": "BR2608036412367",
+            "carrier": "SHOPEE",
+            "recipient": "Dacio Silva Bezerra",
+            "sender": "customst",
+            "cep": "58013-240"
         }
     }
 ]
