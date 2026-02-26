@@ -38,7 +38,7 @@ def extract_text(image_path: str) -> str:
 
     try:
         # psm 4 assumes a single column of text of variable sizes (good for labels)
-        text = pytesseract.image_to_string(processed, lang="eng", config="--psm 4")
+        text = pytesseract.image_to_string(processed, lang="eng", config="--psm 6")
         return text.strip()
     except Exception:
         return ""

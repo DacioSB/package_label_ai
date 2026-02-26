@@ -11,7 +11,7 @@ test_cases = [
             "carrier": "AMAZON",
             "recipient": "Mayara",
             "sender": "DESCONHECIDO",
-            "cep": "58415392" or "68415392"
+            "cep": "68415392" or "58415392"
         }
     },
     {
