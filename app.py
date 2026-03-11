@@ -86,7 +86,8 @@ class App(ctk.CTk):
         # ===================================================
         # CAMERA SETUP
         # ===================================================
-        self.cap = cv2.VideoCapture(0)
+        #self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         self.width, self.height = 800, 600
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
@@ -107,6 +108,9 @@ class App(ctk.CTk):
         Reads a frame from OpenCV, converts to PhotoImage, 
         and updates the label. Runs every 20ms.
         """
+        if not self.cap.isOpened():
+            self.lbl_camera.configure(text="Camera not available")
+            return
         ret, frame = self.cap.read()
         if ret:
             cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
