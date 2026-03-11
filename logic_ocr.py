@@ -2,8 +2,11 @@ import cv2
 import pytesseract
 import re
 import os
+from pathlib import Path
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = str(
+    Path("C:/Users/dacio.bezerra/AppData/Local/Programs/Tesseract-OCR/tesseract.exe")
+)
 
 # =========================================================
 # IMAGE PREPROCESSING
