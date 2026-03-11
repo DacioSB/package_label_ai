@@ -1,0 +1,6 @@
+customtkinter
+opencv-python
+pytesseract
+Pillow
+packaging
+pyinstaller
