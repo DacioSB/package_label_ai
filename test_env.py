@@ -2,16 +2,19 @@ import cv2
 import pytesseract
 import PIL
 import customtkinter
-import shutil
+from pathlib import Path
 
-tesseract_path = shutil.which("tesseract")
+pytesseract.pytesseract.tesseract_cmd = str(
+    Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
+)
 
 print("--- DIAGNOSTIC START (LINUX) ---")
 print(f"✅ OpenCV Version: {cv2.__version__}")
 print(f"✅ Pillow Version: {PIL.__version__}")
 print(f"✅ CustomTkinter Version: {customtkinter.__version__}")
 
-if tesseract_path:
+if "tesseract" in pytesseract.pytesseract.tesseract_cmd:
+    tesseract_path = pytesseract.pytesseract.tesseract_cmd
     print(f"✅ Tesseract Binary Found at: {tesseract_path}")
     try:
         langs = pytesseract.get_languages(config="")
