@@ -18,6 +18,7 @@ def init_db():
             recipient_name TEXT,
             sender_name TEXT,
             carrier TEXT,
+            cep TEXT,
             status TEXT DEFAULT 'RECEIVED',
             created_at DATETIME
         )
@@ -26,7 +27,7 @@ def init_db():
     conn.close()
     print(f"[DB] Database initialized: {DB_NAME}")
 
-def insert_package(image_path, raw_ocr_text, tracking_code, recipient_name, sender, carrier):
+def insert_package(image_path, raw_ocr_text, tracking_code, recipient_name, sender, carrier, cep):
     """
     Inserts a new package record into the database.
     """
@@ -34,9 +35,9 @@ def insert_package(image_path, raw_ocr_text, tracking_code, recipient_name, send
     cursor = conn.cursor()
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     cursor.execute('''
-        INSERT INTO packages (image_path, raw_ocr_text, tracking_code, recipient_name, sender_name, carrier, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (image_path, raw_ocr_text, tracking_code, recipient_name, carrier, timestamp))
+        INSERT INTO packages (image_path, raw_ocr_text, tracking_code, recipient_name, sender_name, carrier, cep, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (image_path, raw_ocr_text, tracking_code, recipient_name, sender, carrier, cep, timestamp))
     conn.commit()
     conn.close()
     print(f"[DB] Package saved: {tracking_code} for {recipient_name}")

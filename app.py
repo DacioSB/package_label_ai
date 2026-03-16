@@ -4,6 +4,7 @@ from PIL import Image
 import os
 import time
 import logic_ocr
+import logic_db
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -14,6 +15,8 @@ class App(ctk.CTk):
 
         self.title("Scan de Encomendas v1.0")
         self.geometry("1280x720")
+
+        logic_db.init_db()
         
         self.grid_columnconfigure(0, weight=2) 
         self.grid_columnconfigure(1, weight=1)
@@ -162,7 +165,31 @@ class App(ctk.CTk):
             self.lbl_status.configure(text="Câmera ativa. Aponte o pacote.", text_color="gray")
 
     def save_data(self):
-        print("Click! (Logic coming in Task 4.2)")
+        if not self.is_frozen or self.current_image_path is None:
+            self.lbl_status.configure(text="⚠️ Erro: Capture uma foto primeiro!", text_color="red")
+            return
+        
+        tracking = self.entry_tracking.get()
+        recipient = self.entry_recipient.get()
+        sender = self.entry_sender.get()
+        carrier = self.entry_carrier.get()
+        cep = self.entry_cep.get()
+        raw_text = self.txt_raw.get("0.0", "end").strip()
+
+        try:
+            logic_db.insert_package(
+                image_path=self.current_image_path,
+                raw_text=raw_text,
+                tracking=tracking,
+                recipient=recipient,
+                sender=sender,
+                carrier=carrier,
+                cep=cep
+            )
+            self.capture_image()
+            self.lbl_status.configure(text="✅ Pacote Salvo! Aponte o próximo.", text_color="green")
+        except Exception as e:
+            self.lbl_status.configure(text=f"❌ Erro ao salvar o pacote: {str(e)}", text_color="red")
 
 if __name__ == "__main__":
     app = App()
