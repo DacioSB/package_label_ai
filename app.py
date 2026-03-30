@@ -174,22 +174,37 @@ class App(ctk.CTk):
         sender = self.entry_sender.get()
         carrier = self.entry_carrier.get()
         cep = self.entry_cep.get()
-        raw_text = self.txt_raw.get("0.0", "end").strip()
+        
+        try:
+            raw_text = self.txt_raw.get("0.0", "end").strip()
+        except:
+            raw_text = self.txt_raw.get("1.0", "end").strip()
 
+        print("\n--- INICIANDO SALVAMENTO ---")
+        print(f"Rastreio: {tracking}")
+        print(f"Destinatário: {recipient}")
+        
         try:
             logic_db.insert_package(
                 image_path=self.current_image_path,
-                raw_text=raw_text,
-                tracking=tracking,
-                recipient=recipient,
+                raw_ocr_text=raw_text,
+                tracking_code=tracking,
+                recipient_name=recipient,
                 sender=sender,
                 carrier=carrier,
                 cep=cep
             )
+            print("✅ Salvo no banco com sucesso!")
+            
+            # Unfreeze the camera and clear the form
             self.capture_image()
+            
+            # Force the status text to show success (must be AFTER capture_image)
             self.lbl_status.configure(text="✅ Pacote Salvo! Aponte o próximo.", text_color="green")
+            
         except Exception as e:
-            self.lbl_status.configure(text=f"❌ Erro ao salvar o pacote: {str(e)}", text_color="red")
+            print(f"❌ ERRO GRAVE NO BANCO DE DADOS: {e}") 
+            self.lbl_status.configure(text=f"❌ Erro: {str(e)[:30]}...", text_color="red")
 
 if __name__ == "__main__":
     app = App()
